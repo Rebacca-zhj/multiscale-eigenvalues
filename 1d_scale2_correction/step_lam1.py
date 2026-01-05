@@ -214,4 +214,5 @@ with torch.no_grad():
     lam0_u0_u0grad_chix_int = lam[0] * u0_u0grad_chix_int
     print('lam0_u0_u0grad_chix_int', lam0_u0_u0grad_chix_int)
 
-    print(hat_F_u0+lam0_u0_u0grad_chix_int)
+    print(-(hat_F_u0+lam0_u0_u0grad_chix_int))
+

@@ -17,7 +17,7 @@ import math
 
 pi = 3.14159265358979323846
 dtype = torch.double
-device = 'cuda:3'
+device = 'cuda:0'
 name = 'x_free_y_per_shift'
 
 m=1
@@ -49,33 +49,18 @@ A_partial_x[:,1,:] = 0
 alpha_A_partial_x = torch.ones(2, dtype=dtype, device=device)
 
 
-# def bd_u0(x):
-#     return torch.sin(pi * x)
-
-# def grad_bd_u0(x):
-#     return pi * torch.cos(pi * x)
-
-# def grad_grad_bd_u0(x):
-#     return -pi * pi * torch.sin(pi * x)
-
-# def grad_grad_grad_bd_u0(x):
-#     return -pi * pi * pi * torch.cos(pi * x)
-
 def bd_u0(x):
-    # return torch.sin(pi * x)
     return (x - a) * (b - x)
 
 def grad_bd_u0(x):
-    # return pi * torch.cos(pi * x)
     return a + b - 2 * x
 
 def grad_grad_bd_u0(x):
-    # return -pi * pi * torch.sin(pi * x)
     return -2 * torch.ones_like(x)
 
 def grad_grad_grad_bd_u0(x):
-    # return -pi * pi * pi * torch.cos(pi * x)
     return 0 * torch.ones_like(x)
+
     
 model_chi1_x = torch.load('./model_chi1/x_free_y_per_final_chi1_x.pkl', map_location=device)
 model_chi1_y1 = torch.load('./model_chi1/x_free_y_per_final_chi1_y1.pkl', map_location=device)
@@ -201,11 +186,19 @@ with torch.no_grad():
     part11_int = torch.einsum('pn,qn,n->pq', A[1,:,:], (eta2_y_grad)[0,:,:], w2)
     alpha_part11 = (torch.einsum('o,p,q->opq', alpha_u0, alpha_A, alpha_eta2) * part11_int).view(-1)
     
-    hat_F = torch.cat((part1, part2, part3, part4, part5, part6, part7, part8, part9, part10, part11), dim=1)
-    alpha_hat_F = torch.cat((alpha_part1, alpha_part2, alpha_part3, alpha_part4, alpha_part5, alpha_part6, alpha_part7, alpha_part8, alpha_part9, alpha_part10, alpha_part11))
+    # u0_x < chi1 >
+    int_u1 = torch.einsum('don,dpn->dopn', u0_x_grad, chi1_x).flatten(start_dim=1, end_dim=2)
+    int_u1_int = torch.einsum('pn,n->p', (chi1_y - chi1_y1_shift)[0,:,:], w2)
+    alpha_int_u1 = torch.outer(alpha_u0, alpha_chi1 * int_u1_int).view(-1)
+    
+    # all f
+    # hat_F = torch.cat((part1, part2, part3, part4, part5, part6, part7, part8, part9, part10, part11), dim=1)
+    # alpha_hat_F = torch.cat((alpha_part1, alpha_part2, alpha_part3, alpha_part4, alpha_part5, alpha_part6, alpha_part7, alpha_part8, alpha_part9, alpha_part10, alpha_part11))
 
-    norm_square_F = Int2TNN(w1, alpha_hat_F, hat_F, alpha_hat_F, hat_F)
+    hat_F = torch.cat((u0_x, int_u1, part1, part2, part3, part4, part5, part6, part7, part8, part9, part10, part11), dim=1)
+    alpha_hat_F = torch.cat((2.085706774640328*alpha_u0, lam[0]*alpha_int_u1, alpha_part1, alpha_part2, alpha_part3, alpha_part4, alpha_part5, alpha_part6, alpha_part7, alpha_part8, alpha_part9, alpha_part10, alpha_part11))
 
+    # norm_square_F = Int2TNN(w1, alpha_hat_F, hat_F, alpha_hat_F, hat_F)
 
     chi1 = torch.ones((2, p_chi1, N), dtype=dtype, device=device)
     chi1_grad_phi = torch.zeros((2, p_chi1, N), dtype=dtype, device=device)
@@ -221,15 +214,15 @@ with torch.no_grad():
     alpha_A0[0:p_A] = torch.sum(w2 * A[1, :, :], dim=-1).squeeze(dim=0) * alpha_A
     alpha_A0[p_A:p_A + p_A * p_chi1] = (torch.einsum('pn,qn->pq', w2 * A[1, :, :], chi1_grad_phi[1, :, :]) * torch.outer(alpha_A, alpha_chi1)).view(-1)
 
-    A0_grad_x = torch.ones((1, p_A + p_A * p_chi1, N), dtype=dtype, device=device)
-    A0_grad_x[0:1, 0:p_A, :] = A_partial_x[0:1, :, :]
-    A0_grad_x[0:1, p_A:p_A + p_A * p_chi1, :] = torch.einsum('dpn,dqn->dpqn', A_partial_x[0:1, :, :], chi1[0:1, :, :]).flatten(start_dim=1, end_dim=2) \
-                                                        + torch.einsum('dpn,dqn->dpqn', A[0:1, :, :], chi1_grad_phi[0:1, :, :]).flatten(start_dim=1, end_dim=2)
+    # A0_grad_x = torch.ones((1, p_A + p_A * p_chi1, N), dtype=dtype, device=device)
+    # A0_grad_x[0:1, 0:p_A, :] = A_partial_x[0:1, :, :]
+    # A0_grad_x[0:1, p_A:p_A + p_A * p_chi1, :] = torch.einsum('dpn,dqn->dpqn', A_partial_x[0:1, :, :], chi1[0:1, :, :]).flatten(start_dim=1, end_dim=2) \
+    #                                                     + torch.einsum('dpn,dqn->dpqn', A[0:1, :, :], chi1_grad_phi[0:1, :, :]).flatten(start_dim=1, end_dim=2)
 
-    alpha_A0_grad_x = alpha_A0
+    # alpha_A0_grad_x = alpha_A0
 
 def criterion_1(model_w):
-    w_phi, w_grad_phi, w_grad_grad_phi = model_w(w1, x1, need_grad=2)
+    # w_phi, w_grad_phi, w_grad_grad_phi = model_w(w1, x1, need_grad=2)
 
     # # 强形式
     # operand_A0_grad_x_w_grad_x = torch.einsum('dpn, dqn->dpqn', A0_grad_x, w_grad_phi)
@@ -251,7 +244,11 @@ def criterion_1(model_w):
     # loss = torch.sqrt(torch.sum(-my_alpha * my_vector) + norm_square_F)
 
     # 弱形式
-    my_matrix = torch.sum(alpha_A0 * torch.einsum('n, pn, qn, kn->pqk', w1, w_grad_phi.squeeze(dim=0), w_grad_phi.squeeze(dim=0), A0.squeeze(dim=0)), dim=-1)
+    w_phi, w_grad_phi = model_w(w1, x1, need_grad=1)
+    
+    my_matrix_1 = torch.sum(alpha_A0 * torch.einsum('n, pn, qn, kn->pqk', w1, w_grad_phi.squeeze(dim=0), w_grad_phi.squeeze(dim=0), A0.squeeze(dim=0)), dim=-1)
+    my_matrix_2 = torch.einsum('n, pn, qn->pq', w1, w_phi.squeeze(dim=0), w_phi.squeeze(dim=0))
+    my_matrix = my_matrix_1 - lam[0].detach() * my_matrix_2
     my_vector = torch.sum(alpha_hat_F * torch.einsum('n, pn, qn->pq', w1, w_phi.squeeze(dim=0), hat_F.squeeze(dim=0)), dim=-1)
 
     my_alpha = torch.linalg.solve(my_matrix, my_vector)
